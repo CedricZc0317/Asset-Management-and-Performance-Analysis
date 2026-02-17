@@ -1,0 +1,360 @@
+---
+title: "Final Project"
+output: pdf_document
+extra_dependencies: ["pdflscape", "longtable"]
+date: "2025-03-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(lubridate)
+library(ggplot2)
+library(scales)
+library(patchwork)
+```
+
+```{r, message=FALSE, echo=FALSE}
+FundData <- read_csv("FinalProject_FundData.csv") %>% select(-1) %>% 
+  mutate(date = myd(paste(date, "1"), truncated = TRUE))
+FundInfo <- read_csv("FinalProject_FundInfo.csv") %>% select(-1)
+FundReturns <- FundData %>% select(1, 11:ncol(FundData))
+
+FundInfo <- FundInfo %>%
+  mutate(
+    Equity_Style = case_when(
+      grepl("V$", Style) ~ "Value",
+      grepl("G$", Style) ~ "Growth",
+      grepl("B$", Style) ~ "Blend"
+    ),
+    Market_Cap = case_when(
+      grepl("^R1000", Style) ~ "Large Cap",
+      grepl("^RMid", Style) ~ "Mid Cap",
+      grepl("^R2000", Style) ~ "Small Cap"
+    ),
+    Benchmark_Ticker = case_when(
+      Style == "R1000B" ~ "IWB",
+      Style == "R1000V" ~ "IWD",
+      Style == "R1000G" ~ "IWF",
+      Style == "R2000B" ~ "IWM",
+      Style == "R2000V" ~ "IWN",
+      Style == "R2000G" ~ "IWO",
+      Style == "RMidB"  ~ "IWR",
+      Style == "RMidV"  ~ "IWS",
+      Style == "RMidG"  ~ "IWP"
+    )
+  )
+```
+
+```{r, message=FALSE, echo=FALSE}
+AggregatedWeights <- FundInfo %>%
+  group_by(Market_Cap, Equity_Style) %>%
+  summarise(
+    weight_B = sum(weight_B),
+    weight_A = sum(weight_A),
+    .groups = "drop"
+  )
+
+BenchmarkReturns <- FundData %>%
+  select(date, all_of(unique(FundInfo$Benchmark_Ticker)))
+
+StyleBenchmarks <- FundInfo %>%
+  select(Market_Cap, Equity_Style, Benchmark_Ticker) %>%
+  distinct() %>%
+  left_join(
+    BenchmarkReturns %>% pivot_longer(-date, names_to = "Benchmark_Ticker", values_to = "BenchmarkReturn"),
+    by = "Benchmark_Ticker"
+  )
+
+FundReturns <- FundData %>%
+  pivot_longer(-date, names_to = "Ticker", values_to = "FundReturn") %>%
+  left_join(FundInfo %>% select(Ticker, Market_Cap, Equity_Style, weight_A), by = "Ticker") %>% na.omit()
+
+Portfolio_Segment_Return <- FundReturns %>%
+  group_by(date, Market_Cap, Equity_Style) %>%
+  summarise(
+    portfolio_segment_return = sum(FundReturn * weight_A) / sum(weight_A),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    StyleBenchmarks %>% select(date, Market_Cap, Equity_Style, BenchmarkReturn),
+    by = c("date", "Market_Cap", "Equity_Style")
+  ) %>%
+  left_join(AggregatedWeights, by = c("Market_Cap", "Equity_Style"))
+```
+
+```{r, message=FALSE, echo=FALSE}
+style <- Portfolio_Segment_Return %>%
+  group_by(date, Equity_Style) %>%
+  summarise(
+    
+    return_B = sum(weight_B * BenchmarkReturn) / sum(weight_B),
+    
+    return_A = sum(weight_A * portfolio_segment_return) / sum(weight_A),
+    
+    weight_B = sum(weight_B),
+    weight_A = sum(weight_A),
+    
+    .groups = "drop"
+  )
+
+overall_benchmark <- style %>%
+  group_by(date) %>%
+  summarise(overall_benchmark = sum(weight_B * return_B), .groups = "drop")
+
+style <- style %>%
+  left_join(overall_benchmark, by = "date")
+
+style <- style %>%
+  mutate(
+    Allocation_Effect = (weight_A - weight_B) * (return_B - overall_benchmark),
+    
+    Implementation_Effect = weight_B * (return_A - return_B),
+    
+    Interaction_Effect = (weight_A - weight_B) * (return_A - return_B),
+    
+    Total_Effect = Allocation_Effect + Implementation_Effect + Interaction_Effect
+  )
+```
+
+```{r, message=FALSE, echo=FALSE}
+size <- Portfolio_Segment_Return %>%
+  group_by(date, Market_Cap) %>%
+  summarise(
+    
+    return_B = sum(weight_B * BenchmarkReturn) / sum(weight_B),
+    
+    return_A = sum(weight_A * portfolio_segment_return) / sum(weight_A),
+    
+    weight_B = sum(weight_B),
+    weight_A = sum(weight_A),
+    
+    .groups = "drop"
+  )
+
+overall_benchmark <- size %>%
+  group_by(date) %>%
+  summarise(overall_benchmark = sum(weight_B * return_B), .groups = "drop")
+
+size <- size %>%
+  left_join(overall_benchmark, by = "date")
+
+size <- size %>%
+  mutate(
+    Allocation_Effect = (weight_A - weight_B) * (return_B - overall_benchmark),
+    
+    Implementation_Effect = weight_B * (return_A - return_B),
+    
+    Interaction_Effect = (weight_A - weight_B) * (return_A - return_B),
+    
+    Total_Effect = Allocation_Effect + Implementation_Effect + Interaction_Effect
+  )
+```
+
+```{r, message=FALSE, echo=FALSE}
+FundReturns <- FundData %>%
+  pivot_longer(-date, names_to = "Ticker", values_to = "FundReturn") %>%
+  left_join(FundInfo %>% select(Name, Ticker, Benchmark_Ticker, Market_Cap, Equity_Style, weight_B, weight_A), by = "Ticker") %>%
+  left_join(BenchmarkReturns %>% pivot_longer(-date, names_to = "Benchmark_Ticker", values_to = "BenchmarkReturn"), by = c("date", "Benchmark_Ticker")) %>% na.omit()
+
+Manager_Analysis <- FundReturns %>%
+  group_by(date, Market_Cap, Equity_Style) %>%
+  mutate(
+    norm_weight_B = weight_B / sum(weight_B, na.rm = TRUE),
+    norm_weight_A = weight_A / sum(weight_A, na.rm = TRUE),
+    overall_benchmark = sum(norm_weight_B * BenchmarkReturn, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+Manager_Analysis <- Manager_Analysis %>%
+  mutate(
+    Allocation_Effect = (norm_weight_A - norm_weight_B) * (BenchmarkReturn - overall_benchmark),
+    Implementation_Effect = norm_weight_B * (FundReturn - BenchmarkReturn),
+    Interaction_Effect = (norm_weight_A - norm_weight_B) * (FundReturn - BenchmarkReturn),
+    Total_Effect = Allocation_Effect + Implementation_Effect + Interaction_Effect
+  )
+```
+
+# Key Results of Time-Series Analysis
+## Allocation vs. Implementation Effects
+\textbf{Allocation effects were near zero} across all size tiers and styles, indicating a \textbf{passive allocation strategy} closely aligned with the benchmark. While this reduces tracking error, it limits opportunities for excess returns through active positioning. Conversely, \textbf{implementation effects varied}, with \textbf{Large Cap Growth showing significant underperformance (-0.0029)} due to weak stock selection, while \textbf{Large Cap Value (0.0010) and Small Cap Growth (0.0005) outperformed}, suggesting better security selection.
+
+## Trends in Performance
+\begin{itemize}
+    \item \textbf{Large Cap Growth struggled (-0.003)}, likely due to valuation sensitivity or poor stock selection.
+    \item \textbf{Large Cap Value outperformed (0.0009)}, benefiting from stronger fundamentals.
+    \item \textbf{Mid Cap Blend showed slight positive results (0.0004)} while Growth remained neutral.
+    \item \textbf{Small Cap Growth displayed potential} but lacked consistency.
+\end{itemize}
+
+## Manager Information Ratios
+\textbf{Most managers had weak risk-adjusted returns}, with \textbf{IRs below 0.2}. A notable underperformer was \textbf{BlackRock Large Cap Focus Value Fund (IR = -0.183)}, despite active positioning. However, \textbf{Ave Maria Growth Fund (IR = 0.128)} and \textbf{Lord Abbett Micro Cap Growth Fund (IR = 0.120)} stood out as \textbf{top performers}, delivering superior risk-adjusted returns. 
+
+## Recommendations
+\begin{itemize}
+    \item \textbf{Enhance Growth Stock Selection:} Large Cap Growth underperformance suggests weaknesses in security selection—factor-based screening should be considered.
+    \item \textbf{Increase Flexibility in Value Strategies:} Value-focused managers consistently delivered positive results and should be given additional capital.
+    \item \textbf{Strengthen Risk Management:} High tracking error in some funds, like Boston Partners All Cap Value Fund, suggests the need for tighter risk controls.
+\end{itemize}
+
+By addressing these weaknesses while leveraging top-performing funds, the firm can enhance overall investment performance.
+
+# Areas for Improvement
+## Growth Stock Selection and Passive Allocation Strategy
+The analysis highlights two key areas for improvement: \textbf{Growth stock selection} and \textbf{passive allocation strategy}. Large Cap Growth underperformed (Implementation Effect = -0.0029), suggesting managers may be \textbf{overpaying for momentum stocks}. A \textbf{factor exposure review} is needed to integrate value and profitability filters. Additionally, near-zero allocation effects indicate a \textbf{passive management approach}, limiting \textbf{alpha opportunities}. Tactical shifts, particularly in \textbf{Value strategies}, could enhance returns.
+
+## Risk Management Considerations
+Some funds, like Boston Partners All Cap Value Fund (Tracking Error = 0.014, Active Return = -0.002), took risks but failed to deliver alpha. \textbf{Tighter active risk limits} should reduce off-benchmark bets. Growth strategies also showed \textbf{high implementation volatility}, requiring \textbf{risk-adjusted constraints} for more consistent performance. Strengthening stock selection, allocation flexibility, and risk controls will improve overall investment outcomes.
+
+# Opportunities for Additional Flexibility
+## Expanding Strategic Bets
+Expanding \textbf{Value strategies} is key, as \textbf{Large Cap Value} consistently outperforms Growth. Increasing allocations to \textbf{top-performing Value funds} can enhance returns. \textbf{Small Cap Growth} also shows promise, with \textbf{Lord Abbett Micro Cap Growth Fund} delivering the best \textbf{risk-adjusted returns}, warranting expanded mandates.
+
+## Capitalizing on Strong Performers
+To capitalize on strong performers, \textbf{high Information Ratio managers} should receive larger mandates. \textbf{Ave Maria Growth Fund} and \textbf{Lord Abbett Micro Cap Growth Fund} stand out, justifying \textbf{greater capital allocations and leadership roles} in strategy development.
+
+# Observed Patterns
+\textbf{Value strategies consistently outperformed Growth}, likely due to cyclical macroeconomic trends favoring undervalued equities. \textbf{Large Cap} was dominated by \textbf{Value strategies}, while \textbf{Small Cap Growth showed potential} but was inconsistent. A small subset of managers contributed most positive results, while \textbf{Growth managers struggled across multiple tiers}.
+
+# Conclusion
+The firm's \textbf{investment process is effective in Value strategies but struggles in Growth stock selection and active allocation}. To enhance performance, I recommend the following:
+
+\begin{enumerate}
+    \item \textbf{Revamp Growth Research \& Factor Exposure:} Address implementation gaps in Growth strategies to prevent further underperformance.
+    \item \textbf{Empower Top-Performing Managers:} Grant flexibility and increased allocations to \textbf{high IR managers}.
+    \item \textbf{Adopt a More Dynamic Allocation Strategy:} Move from \textbf{passive benchmarking} to \textbf{tactical positioning} in areas with clear alpha-generation potential.
+\end{enumerate}
+
+
+\newpage
+
+# Appendix
+```{r, echo=FALSE, message=FALSE, combined_plot, fig.width=12, fig.height=6, out.width="100%"}
+size_plot <- size %>%
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = Allocation_Effect, color = "Allocation"), linewidth = 0.8) +
+  geom_line(aes(y = Implementation_Effect, color = "Implementation"), linewidth = 0.8) +
+  facet_wrap(~Market_Cap, ncol = 1) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(title = "Size Tier Performance",
+       x = "Date", y = "Effect Value", color = "Metric") +
+  theme_minimal() +
+  scale_color_manual(values = c("Allocation" = "#1f77b4", "Implementation" = "#ff7f0e"))
+
+style_plot <- style %>%
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = Allocation_Effect, color = "Allocation"), linewidth = 0.8) +
+  geom_line(aes(y = Implementation_Effect, color = "Implementation"), linewidth = 0.8) +
+  facet_wrap(~Equity_Style, ncol = 1) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(title = "Style Decision Performance",
+       x = "Date", y = "Effect Value", color = "Metric") +
+  theme_minimal() +
+  scale_color_manual(values = c("Allocation" = "#1f77b4", "Implementation" = "#ff7f0e"))
+
+combined_plot <- size_plot + style_plot + 
+  plot_layout(ncol = 2, guides = "collect") & theme(legend.position = "bottom")
+
+print(combined_plot)
+```
+
+
+```{r, echo=FALSE}
+avg_performance <- bind_rows(
+  size %>%
+    group_by(Market_Cap) %>%
+    summarise(across(c(Allocation_Effect, Implementation_Effect, Total_Effect), mean),
+              .groups = "drop") %>%
+    mutate(Category = "Size"),
+  
+  style %>%
+    group_by(Equity_Style) %>%
+    summarise(across(c(Allocation_Effect, Implementation_Effect, Total_Effect), mean),
+              .groups = "drop") %>%
+    rename("Market_Cap" = "Equity_Style") %>%
+    mutate(Category = "Style")
+) %>%
+  select(Category, everything())
+
+style_cap_table <- Manager_Analysis %>%
+  group_by(Market_Cap, Equity_Style) %>%
+  summarise(
+    Avg_Allocation = mean(Allocation_Effect),
+    Avg_Implementation = mean(Implementation_Effect),
+    Avg_Total = mean(Total_Effect),
+    .groups = "drop"
+  )
+
+avg_performance %>%
+  kable(format = "latex", booktabs = TRUE, digits = 4,
+        caption = "Average Performance by Category") %>%
+  kable_styling(latex_options = c("hold_position", "scale_down"), font_size = 8)
+
+style_cap_table %>%
+  kable(format = "latex", booktabs = TRUE, digits = 4,
+        caption = "Style/Cap Tier Performance") %>%
+  kable_styling(latex_options = c("hold_position", "scale_down"), font_size = 8)
+```
+
+```{r, echo=FALSE}
+info_ratio_table <- Manager_Analysis %>%
+  group_by(Name, Market_Cap, Equity_Style) %>%
+  summarise(
+    Active_Return = mean(Total_Effect),
+    Tracking_Error = sd(Total_Effect),
+    Information_Ratio = Active_Return / Tracking_Error,
+    .groups = "drop"
+  ) %>%
+  arrange(Market_Cap, Equity_Style, desc(Information_Ratio))
+
+info_ratio_table %>%
+  kable(format = "latex", booktabs = TRUE, digits = 3,
+        caption = "Manager Information Ratios") %>%
+  kable_styling(latex_options = c("hold_position", "scale_down")) %>%
+  row_spec(which(info_ratio_table$Information_Ratio > 0.5), bold = TRUE, background = "#e6f5d0")
+```
+
+```{r, echo=FALSE}
+december_style <- style %>%
+  filter(lubridate::month(date) == 12) %>%
+  select(date, Equity_Style, Allocation_Effect, Implementation_Effect, Total_Effect)
+
+print(december_style)
+```
+
+```{r, echo=FALSE}
+december_size <- size %>%
+  filter(lubridate::month(date) == 12) %>%
+  select(date, Market_Cap, Allocation_Effect, Implementation_Effect, Total_Effect)
+
+print(december_size)
+```
+
+```{r, echo=FALSE}
+December_Effect_Table <- Manager_Analysis %>%
+  filter(month(date) == 12) %>%
+  select(date, Name, Market_Cap, Equity_Style, Allocation_Effect, Implementation_Effect, Total_Effect) %>%
+  arrange(date, Market_Cap, Equity_Style, Name)
+
+December_Effect_Table %>%
+  kable(
+    format = "latex",
+    booktabs = TRUE,
+    caption = "December Effect Analysis",
+    longtable = TRUE
+  ) %>%
+  kable_styling(
+    latex_options = c("scale_down", "repeat_header"),
+    font_size = 7,
+    full_width = FALSE
+  ) %>%
+  landscape()
+```
+

@@ -1,0 +1,26 @@
+,Name,Ticker,Style,weight_B,weight_A
+1,CIBC Atlas Disciplined Equity Fund,AWEIX,R1000B,0.12,0.1
+2,Columbia Select Large Cap Equity Fund,NSEPX,R1000B,0.12,0.05
+3,AMG Montrusco Bolton Large Cap Growth Fund,MCGFX,R1000V,0.058,0.06
+4,Alger Responsible Investing Fund,SPEGX,R1000V,0.058,0.09
+5,American Century Focused Dynamic Growth Fund,ACFSX,R1000V,0.058,0.02
+6,Ave Maria Growth Fund,AVEGX,R1000V,0.058,0.07
+7,BlackRock Large Cap Focus Value Fund,MABAX,R1000G,0.115,0.04
+8,Boston Partners All Cap Value Fund,BPAIX,R1000G,0.115,0.03
+9,Harbor Small Cap Value Fund,HASCX,R2000B,0.025,0.003
+10,Hartford Schroders US Small Cap Opps Fund,SCUIX,R2000B,0.025,0.002
+11,Hennessy Cornerstone Growth Fund,HFCGX,R2000B,0.025,0.001
+12,Highland Small Cap Equity Fund,HSZYX,R2000B,0.025,0.01
+13,Homestead Small Company Stock Fund,HSCSX,R2000B,0.025,0.02
+14,JP Morgan Small Cap Value Fund,PSOPX,R2000V,0.012,0.01
+15,James Micro Cap Fund,JMCRX,R2000V,0.012,0.08
+16,Lord Abbett Alpha Strategy Fund,ALFAX,R2000G,0.011,0.02
+17,Lord Abbett Developing Growth Fund,LAGWX,R2000G,0.011,0.05
+18,Lord Abbett Micro Cap Growth Fund,LMIYX,R2000G,0.011,0.05
+19,Davenport Equity Opportunities Fund,DEOPX,RMidB,0.05,0.154
+20,Fidelity Mid Cap Value Fund,FSMVX,RMidV,0.017,0.02
+21,Franklin Mutual U.S. Value Fund,FRBSX,RMidV,0.017,0.04
+22,Goldman Sachs Mid Cap Growth Fund,GGOIX,RMidG,0.008,0.01
+23,Great-West T. Rowe Price Mid Cap Growth Fund,MXMGX,RMidG,0.008,0.01
+24,Guggenheim StylePlus - Mid Growth Fund,SECUX,RMidG,0.008,0.01
+25,ARK Innovation ETF,ARKK,RMidG,0.008,0.05
